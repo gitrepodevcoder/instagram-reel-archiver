@@ -11,7 +11,7 @@ from google.genai import types
 # Configuration from Environment Variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "9260462505:AAFzJGE9m2McU3RLadehA2zs_FAU3Wx3zrs")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6IbKRFVlHiK4rcnT1Ajm6sUZcph_Df9E-uCjgXSaQFJtA")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")  # Google Apps Script Web App URL
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://script.google.com/macros/s/AKfycbwGqjMFkzBZKu7wy00nJYGZIsP9oRpOjlMHpmPPc_VcsZDEQu4wI4nF44GPdxvBALY3/exec")
 
 TELEGRAM_API_BASE = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
