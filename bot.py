@@ -110,7 +110,7 @@ Return only the raw JSON without markdown code fences or backticks."""
         }
     return data
 
-def save_to_google_sheet_and_drive(reel_url, provided_link, creator, ai_summary):
+def save_to_google_sheet_and_drive(reel_url, provided_link, creator, ai_summary, video_path=None, reel_id=None):
     if not WEBHOOK_URL:
         print("WEBHOOK_URL not set, skipping Google Sheet append.")
         return None
@@ -122,6 +122,11 @@ def save_to_google_sheet_and_drive(reel_url, provided_link, creator, ai_summary)
             "creator": f"@{creator}" if not creator.startswith("@") else creator,
             "ai_summary": ai_summary
         }
+
+        if video_path and os.path.exists(video_path):
+            with open(video_path, "rb") as f:
+                payload["video_base64"] = base64.b64encode(f.read()).decode("utf-8")
+            payload["video_name"] = f"{creator}_{reel_id}.mp4"
 
         resp = requests.post(WEBHOOK_URL, json=payload, timeout=60)
         return resp.json()
@@ -173,12 +178,14 @@ def process_message(message):
 
         summary = ai_data.get("summary", "Summary generated")
 
-        # Save to Google Sheet via Webhook
+        # Save to Google Sheet & Drive via Webhook
         sheet_res = save_to_google_sheet_and_drive(
             reel_url,
             provided_link,
             creator,
-            summary
+            summary,
+            video_path,
+            reel_id
         )
 
         reply = f"✅ *Reel Successfully Archived!*\n\n"
