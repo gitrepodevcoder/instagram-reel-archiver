@@ -63,15 +63,22 @@ def send_telegram_message(chat_id, text, reply_to_message_id=None):
             time.sleep(1)
 
 def parse_urls(text):
-    urls = re.findall(r'https?://[^\s]+', text)
+    # Match standard http/https links and domains like github.com, www., etc.
+    url_pattern = r'(?:https?://[^\s]+|(?:www\.|github\.com/|gitlab\.com/)[^\s]+)'
+    raw_urls = re.findall(url_pattern, text, re.IGNORECASE)
+    
     reel_url = None
     provided_link = ""
 
-    for u in urls:
-        if "instagram.com" in u:
-            reel_url = u
+    for u in raw_urls:
+        clean_u = u.rstrip(".,;!)]}>'\"")
+        if not clean_u.startswith("http://") and not clean_u.startswith("https://"):
+            clean_u = "https://" + clean_u
+            
+        if "instagram.com" in clean_u.lower():
+            reel_url = clean_u
         else:
-            provided_link = u
+            provided_link = clean_u
 
     return reel_url, provided_link
 
