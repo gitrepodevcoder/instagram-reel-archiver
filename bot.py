@@ -110,23 +110,17 @@ Return only the raw JSON without markdown code fences or backticks."""
         }
     return data
 
-def save_to_google_sheet_and_drive(reel_url, provided_link, detected_tool, creator, ai_summary, video_path, reel_id):
+def save_to_google_sheet_and_drive(reel_url, provided_link, creator, ai_summary):
     if not WEBHOOK_URL:
         print("WEBHOOK_URL not set, skipping Google Sheet append.")
         return None
 
     try:
-        with open(video_path, "rb") as f:
-            b64_video = base64.b64encode(f.read()).decode("utf-8")
-
         payload = {
             "reel_link": reel_url,
             "provided_link": provided_link,
-            "detected_tool": detected_tool,
             "creator": f"@{creator}" if not creator.startswith("@") else creator,
-            "ai_summary": ai_summary,
-            "video_base64": b64_video,
-            "video_name": f"{creator}_{reel_id}.mp4"
+            "ai_summary": ai_summary
         }
 
         resp = requests.post(WEBHOOK_URL, json=payload, timeout=60)
@@ -153,34 +147,23 @@ def process_message(message):
         ai_data = analyze_with_gemini(video_path)
 
         summary = ai_data.get("summary", "Summary generated")
-        detected_tool = ai_data.get("detected_tool", "")
-        detected_link = ai_data.get("detected_link", "")
 
-        # Save to Google Sheet & Drive via Webhook
+        # Save to Google Sheet via Webhook
         sheet_res = save_to_google_sheet_and_drive(
             reel_url,
             provided_link,
-            detected_tool or detected_link,
             creator,
-            summary,
-            video_path,
-            reel_id
+            summary
         )
 
         reply = f"✅ *Reel Successfully Archived!*\n\n"
         reply += f"👤 *Creator:* `@{creator}`\n"
         if provided_link:
             reply += f"🔗 *Provided Link:* {provided_link}\n"
-        if detected_tool:
-            reply += f"🛠️ *Detected Tool:* `{detected_tool}`\n"
-        if detected_link and detected_link != provided_link:
-            reply += f"🌐 *Tool Link:* {detected_link}\n"
         reply += f"\n📝 *AI Summary:*\n{summary}\n"
 
         if sheet_res and sheet_res.get("status") == "success":
-            reply += f"\n📊 *Saved to Google Sheet & Drive!*"
-            if sheet_res.get("video_url"):
-                reply += f"\n🎬 [Watch Video in Drive]({sheet_res['video_url']})"
+            reply += f"\n📊 *Saved to Google Sheet!*"
         else:
             reply += f"\n📊 *Google Sheet:* Ready for Webhook connection."
 
