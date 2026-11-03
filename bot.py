@@ -10,6 +10,13 @@ import yt_dlp
 from google import genai
 from google.genai import types
 
+# Force IPv4 connection to prevent Windows/ISP IPv6 hanging issues with Telegram API
+import urllib3.util.connection as urllib3_cn
+def allowed_gai_family():
+    import socket
+    return socket.AF_INET
+urllib3_cn.allowed_gai_family = allowed_gai_family
+
 # Lightweight HTTP Health Server for 24/7 Cloud Platforms (Render, Koyeb, Hugging Face)
 class HealthServerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
