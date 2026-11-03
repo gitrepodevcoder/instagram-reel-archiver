@@ -17,13 +17,13 @@ def allowed_gai_family():
     return socket.AF_INET
 urllib3_cn.allowed_gai_family = allowed_gai_family
 
-# Lightweight HTTP Health Server for 24/7 Cloud Platforms (Render, Koyeb, Hugging Face)
+# Lightweight HTTP Health Server for Render / Cloud (Empty response)
 class HealthServerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain; charset=utf-8')
         self.end_headers()
-        self.wfile.write(b"Instagram Reel Archiver Bot is running online 24/7!")
+        self.wfile.write(b"")
     def log_message(self, format, *args):
         return  # Silence health check request logs
 
