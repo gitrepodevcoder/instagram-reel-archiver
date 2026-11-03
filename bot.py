@@ -3,10 +3,27 @@ import re
 import json
 import time
 import base64
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
 import yt_dlp
 from google import genai
 from google.genai import types
+
+# Lightweight HTTP Health Server for 24/7 Cloud Platforms (Render, Koyeb, Hugging Face)
+class HealthServerHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(b"Instagram Reel Archiver Bot is running online 24/7!")
+    def log_message(self, format, *args):
+        return  # Silence health check request logs
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthServerHandler)
+    server.serve_forever()
 
 # Configuration from Environment Variables
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "9260462505:AAFzJGE9m2McU3RLadehA2zs_FAU3Wx3zrs")
@@ -216,6 +233,12 @@ def process_message(message):
 
 def main():
     print("Instagram Reel Archiver Bot is running...")
+    
+    # Start Cloud Health Server in background thread
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
+    print("Health server running on port " + os.getenv("PORT", "8080"))
+
     offset = None
 
     while True:

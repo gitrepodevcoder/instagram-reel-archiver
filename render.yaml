@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: instagram-reel-archiver
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: 9260462505:AAFzJGE9m2McU3RLadehA2zs_FAU3Wx3zrs
+      - key: GEMINI_API_KEY
+        value: AQ.Ab8RN6IbKRFVlHiK4rcnT1Ajm6sUZcph_Df9E-uCjgXSaQFJtA
+      - key: WEBHOOK_URL
+        value: https://script.google.com/macros/s/AKfycbwGqjMFkzBZKu7wy00nJYGZIsP9oRpOjlMHpmPPc_VcsZDEQu4wI4nF44GPdxvBALY3/exec
+      - key: PORT
+        value: 8080
