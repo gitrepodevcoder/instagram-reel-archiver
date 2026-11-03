@@ -92,10 +92,11 @@ def download_reel(url):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
-        uploader = info.get("uploader") or info.get("channel") or "Unknown"
+        # Instagram handle (username) is in 'channel'; 'uploader' is only the display profile name
+        creator = info.get("channel") or info.get("uploader") or "Unknown"
         reel_id = info.get("id") or str(int(time.time()))
         caption = info.get("description") or ""
-        return filename, uploader, reel_id, caption
+        return filename, creator, reel_id, caption
 
 def analyze_with_gemini(video_path):
     print(f"Uploading {video_path} to Gemini API...")
