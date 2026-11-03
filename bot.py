@@ -60,7 +60,8 @@ def download_reel(url):
         filename = ydl.prepare_filename(info)
         uploader = info.get("uploader") or info.get("channel") or "Unknown"
         reel_id = info.get("id") or str(int(time.time()))
-        return filename, uploader, reel_id
+        caption = info.get("description") or ""
+        return filename, uploader, reel_id, caption
 
 def analyze_with_gemini(video_path):
     print(f"Uploading {video_path} to Gemini API...")
@@ -110,7 +111,7 @@ Return only the raw JSON without markdown code fences or backticks."""
         }
     return data
 
-def save_to_google_sheet_and_drive(reel_url, provided_link, creator, ai_summary, video_path=None, reel_id=None):
+def save_to_google_sheet_and_drive(reel_url, provided_link, creator, caption, ai_summary, video_path=None, reel_id=None):
     if not WEBHOOK_URL:
         print("WEBHOOK_URL not set, skipping Google Sheet append.")
         return None
@@ -120,6 +121,7 @@ def save_to_google_sheet_and_drive(reel_url, provided_link, creator, ai_summary,
             "reel_link": reel_url,
             "provided_link": provided_link,
             "creator": f"@{creator}" if not creator.startswith("@") else creator,
+            "caption": caption,
             "ai_summary": ai_summary
         }
 
@@ -173,7 +175,7 @@ def process_message(message):
 
     video_path = None
     try:
-        video_path, creator, reel_id = download_reel(reel_url)
+        video_path, creator, reel_id, caption = download_reel(reel_url)
         ai_data = analyze_with_gemini(video_path)
 
         summary = ai_data.get("summary", "Summary generated")
@@ -183,6 +185,7 @@ def process_message(message):
             reel_url,
             provided_link,
             creator,
+            caption,
             summary,
             video_path,
             reel_id
