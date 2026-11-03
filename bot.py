@@ -129,14 +129,39 @@ def save_to_google_sheet_and_drive(reel_url, provided_link, creator, ai_summary)
         print(f"Error saving to Google Sheet/Drive: {e}")
         return None
 
+def update_last_row_link(provided_link):
+    if not WEBHOOK_URL:
+        return None
+    try:
+        payload = {
+            "action": "update_last_link",
+            "provided_link": provided_link
+        }
+        resp = requests.post(WEBHOOK_URL, json=payload, timeout=20)
+        return resp.json()
+    except Exception as e:
+        print(f"Error updating last link: {e}")
+        return None
+
 def process_message(message):
     chat_id = message["chat"]["id"]
     text = message.get("text", "")
     message_id = message["message_id"]
 
     reel_url, provided_link = parse_urls(text)
+
+    # Follow-up: User sent only the tool/github link after the reel!
+    if not reel_url and provided_link:
+        res = update_last_row_link(provided_link)
+        if res and res.get("status") == "success":
+            row_num = res.get("updated_row", "last")
+            send_telegram_message(chat_id, f"🔗 *Link Attached!*\nUpdated `Provided Link` on row #{row_num} with:\n`{provided_link}`", message_id)
+        else:
+            send_telegram_message(chat_id, f"ℹ️ Received link:\n`{provided_link}`\n_Send an Instagram reel first to attach this link to._", message_id)
+        return
+
     if not reel_url:
-        send_telegram_message(chat_id, "ℹ️ Please send a valid Instagram Reel link!\n\n_Example:_\n`https://www.instagram.com/reel/Cxxxx/`\n`https://github.com/project/name`", message_id)
+        send_telegram_message(chat_id, "ℹ️ Please send an Instagram Reel link!\n\n_Example:_\n`https://www.instagram.com/reel/Cxxxx/`\n`https://github.com/project/name`", message_id)
         return
 
     send_telegram_message(chat_id, "⏳ *Processing Reel...*\nDownloading video & analyzing speech with Gemini AI...", message_id)
