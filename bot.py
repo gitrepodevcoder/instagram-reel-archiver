@@ -197,6 +197,19 @@ def process_message(message):
     text = message.get("text") or message.get("caption") or ""
     message_id = message["message_id"]
 
+    # 1-Click Clean / Reset Command via Telegram
+    if text.strip().lower() in ["/clean", "/reset", "clean", "reset"]:
+        send_telegram_message(chat_id, "🧹 *Cleaning Google Sheet & Google Drive...*", message_id)
+        try:
+            res = requests.post(WEBHOOK_URL, json={"action": "clean_all"}, timeout=30).json()
+            if res.get("status") == "success":
+                send_telegram_message(chat_id, "✅ *Google Sheet aur Google Drive clean ho gaye!*\n\nAb nayi video `#001` se save hogi.", message_id)
+            else:
+                send_telegram_message(chat_id, "❌ Error cleaning: " + str(res.get("message")), message_id)
+        except Exception as e:
+            send_telegram_message(chat_id, f"❌ Error: {e}", message_id)
+        return
+
     reel_url, provided_link = parse_urls(text)
 
     # Follow-up: User sent only the tool/github link after the reel!
