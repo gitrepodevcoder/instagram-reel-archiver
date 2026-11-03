@@ -54,10 +54,13 @@ def send_telegram_message(chat_id, text, reply_to_message_id=None):
     }
     if reply_to_message_id:
         payload["reply_to_message_id"] = reply_to_message_id
-    try:
-        requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        print(f"Error sending message: {e}")
+    for attempt in range(2):
+        try:
+            requests.post(url, json=payload, timeout=25)
+            break
+        except Exception as e:
+            print(f"Error sending message (attempt {attempt+1}): {e}")
+            time.sleep(1)
 
 def parse_urls(text):
     urls = re.findall(r'https?://[^\s]+', text)
@@ -105,10 +108,17 @@ Analyze the content and respond with a strictly valid JSON object matching this 
 }
 Return only the raw JSON without markdown code fences or backticks."""
 
-    response = client.models.generate_content(
-        model='gemini-2.5-flash',
-        contents=[video_file, prompt]
-    )
+    try:
+        response = client.models.generate_content(
+            model='gemini-3.5-flash',
+            contents=[video_file, prompt]
+        )
+    except Exception as e:
+        print(f"gemini-3.5-flash fallback to gemini-3.5-flash-lite: {e}")
+        response = client.models.generate_content(
+            model='gemini-3.5-flash-lite',
+            contents=[video_file, prompt]
+        )
 
     # Clean up uploaded file from Gemini storage
     try:
