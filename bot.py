@@ -68,7 +68,7 @@ def parse_urls(text):
     provided_link = ""
 
     for u in urls:
-        if "instagram.com" in u and ("/reel/" in u or "/p/" in u or "/share/" in u):
+        if "instagram.com" in u:
             reel_url = u
         else:
             provided_link = u
@@ -186,7 +186,7 @@ def update_last_row_link(provided_link):
 
 def process_message(message):
     chat_id = message["chat"]["id"]
-    text = message.get("text", "")
+    text = message.get("text") or message.get("caption") or ""
     message_id = message["message_id"]
 
     reel_url, provided_link = parse_urls(text)
@@ -270,8 +270,9 @@ def main():
                 data = resp.json()
                 for update in data.get("result", []):
                     offset = update["update_id"] + 1
-                    if "message" in update and "text" in update["message"]:
-                        process_message(update["message"])
+                    msg = update.get("message") or update.get("channel_post") or update.get("edited_message")
+                    if msg:
+                        process_message(msg)
         except Exception as e:
             print(f"Polling error: {e}")
             time.sleep(3)
