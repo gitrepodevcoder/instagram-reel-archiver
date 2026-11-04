@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import json
 import time
@@ -17,25 +18,10 @@ def allowed_gai_family():
     return socket.AF_INET
 urllib3_cn.allowed_gai_family = allowed_gai_family
 
-# Lightweight HTTP Health Server for Render / Cloud (Empty response)
-class HealthServerHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain; charset=utf-8')
-        self.end_headers()
-        self.wfile.write(b"")
-    def log_message(self, format, *args):
-        return  # Silence health check request logs
-
-def start_health_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), HealthServerHandler)
-    server.serve_forever()
-
-# Configuration from Environment Variables
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "9260462505:AAFzJGE9m2McU3RLadehA2zs_FAU3Wx3zrs")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6IbKRFVlHiK4rcnT1Ajm6sUZcph_Df9E-uCjgXSaQFJtA")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://script.google.com/macros/s/AKfycbwGqjMFkzBZKu7wy00nJYGZIsP9oRpOjlMHpmPPc_VcsZDEQu4wI4nF44GPdxvBALY3/exec")
+# Configuration from Environment Variables (set on Render)
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 TELEGRAM_API_BASE = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
@@ -63,7 +49,6 @@ def send_telegram_message(chat_id, text, reply_to_message_id=None):
             time.sleep(1)
 
 def parse_urls(text):
-    # Match standard http/https links and domains like github.com, www., etc.
     url_pattern = r'(?:https?://[^\s]+|(?:www\.|github\.com/|gitlab\.com/)[^\s]+)'
     raw_urls = re.findall(url_pattern, text, re.IGNORECASE)
     
@@ -92,7 +77,6 @@ def download_reel(url):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filename = ydl.prepare_filename(info)
-        # Instagram handle (username) is in 'channel'; 'uploader' is only the display profile name
         creator = info.get("channel") or info.get("uploader") or "Unknown"
         reel_id = info.get("id") or str(int(time.time()))
         caption = info.get("description") or ""
@@ -102,7 +86,6 @@ def analyze_with_gemini(video_path):
     print(f"Uploading {video_path} to Gemini API...")
     video_file = client.files.upload(file=video_path)
     
-    # Wait for processing if needed
     while video_file.state.name == "PROCESSING":
         time.sleep(2)
         video_file = client.files.get(name=video_file.name)
@@ -128,49 +111,46 @@ Return only the raw JSON without markdown code fences or backticks."""
             contents=[video_file, prompt]
         )
 
-    # Clean up uploaded file from Gemini storage
-    try:
-        client.files.delete(name=video_file.name)
-    except Exception:
-        pass
-
-    text = response.text.strip()
-    if text.startswith("```json"):
-        text = text[7:]
-    if text.startswith("```"):
-        text = text[3:]
-    if text.endswith("```"):
-        text = text[:-3]
-    text = text.strip()
+    text_resp = response.text.strip()
+    if text_resp.startswith("```json"):
+        text_resp = text_resp[7:]
+    if text_resp.startswith("```"):
+        text_resp = text_resp[3:]
+    if text_resp.endswith("```"):
+        text_resp = text_resp[:-3]
+    text_resp = text_resp.strip()
 
     try:
-        data = json.loads(text)
-    except Exception:
-        data = {
-            "summary": response.text.strip(),
-            "detected_tool": "Detected from video",
+        data = json.loads(text_resp)
+        return data
+    except Exception as e:
+        print(f"JSON Parsing error: {e}. Raw response: {text_resp}")
+        return {
+            "summary": text_resp,
+            "detected_tool": "",
             "detected_link": ""
         }
-    return data
 
-def save_to_google_sheet_and_drive(reel_url, provided_link, creator, caption, ai_summary, video_path=None, reel_id=None):
+def save_to_google_sheet_and_drive(reel_url, provided_link, creator, caption, summary, video_path, reel_id):
     if not WEBHOOK_URL:
-        print("WEBHOOK_URL not set, skipping Google Sheet append.")
+        print("WEBHOOK_URL is not set!")
         return None
 
     try:
+        video_b64 = ""
+        if video_path and os.path.exists(video_path):
+            with open(video_path, "rb") as vf:
+                video_b64 = base64.b64encode(vf.read()).decode("utf-8")
+
         payload = {
             "reel_link": reel_url,
             "provided_link": provided_link,
-            "creator": f"@{creator}" if not creator.startswith("@") else creator,
-            "caption": caption,
-            "ai_summary": ai_summary
+            "creator": creator,
+            "caption": caption[:500],
+            "ai_summary": summary,
+            "video_base64": video_b64,
+            "video_name": f"{creator}_{reel_id}.mp4"
         }
-
-        if video_path and os.path.exists(video_path):
-            with open(video_path, "rb") as f:
-                payload["video_base64"] = base64.b64encode(f.read()).decode("utf-8")
-            payload["video_name"] = f"{creator}_{reel_id}.mp4"
 
         resp = requests.post(WEBHOOK_URL, json=payload, timeout=60)
         return resp.json()
@@ -197,7 +177,6 @@ def process_message(message):
     text = message.get("text") or message.get("caption") or ""
     message_id = message["message_id"]
 
-    # 1-Click Clean / Reset Command via Telegram
     if text.strip().lower() in ["/clean", "/reset", "clean", "reset"]:
         send_telegram_message(chat_id, "🧹 *Cleaning Google Sheet & Google Drive...*", message_id)
         try:
@@ -212,7 +191,6 @@ def process_message(message):
 
     reel_url, provided_link = parse_urls(text)
 
-    # Follow-up: User sent only the tool/github link after the reel!
     if not reel_url and provided_link:
         res = update_last_row_link(provided_link)
         if res and res.get("status") == "success":
@@ -235,7 +213,6 @@ def process_message(message):
 
         summary = ai_data.get("summary", "Summary generated")
 
-        # Save to Google Sheet & Drive via Webhook
         sheet_res = save_to_google_sheet_and_drive(
             reel_url,
             provided_link,
@@ -269,34 +246,52 @@ def process_message(message):
             except Exception:
                 pass
 
+# Webhook & Health Server for Render
+class WebhookServerHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(b"Instagram Reel Archiver is Live!")
+
+    def do_POST(self):
+        if self.path in ["/webhook", "/"]:
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(b"OK")
+            try:
+                update = json.loads(post_data.decode('utf-8'))
+                msg = update.get("message") or update.get("channel_post") or update.get("edited_message")
+                if msg:
+                    # Run processing in background thread so Telegram gets instant 200 OK
+                    threading.Thread(target=process_message, args=(msg,), daemon=True).start()
+            except Exception as e:
+                print(f"Webhook processing error: {e}")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        return
+
 def main():
-    print("Instagram Reel Archiver Bot is running...")
+    print("Instagram Reel Archiver starting in Webhook Mode...")
     
-    # Start Cloud Health Server in background thread
-    health_thread = threading.Thread(target=start_health_server, daemon=True)
-    health_thread.start()
-    print("Health server running on port " + os.getenv("PORT", "8080"))
+    # Auto register Webhook with Telegram
+    webhook_url = "https://instagram-reel-archiver.onrender.com/webhook"
+    try:
+        r = requests.post(f"{TELEGRAM_API_BASE}/setWebhook", json={"url": webhook_url, "drop_pending_updates": False}, timeout=15)
+        print("Telegram Webhook registration:", r.status_code, r.text)
+    except Exception as e:
+        print("Failed to register Telegram Webhook:", e)
 
-    offset = None
-
-    while True:
-        try:
-            url = f"{TELEGRAM_API_BASE}/getUpdates"
-            params = {"timeout": 30}
-            if offset:
-                params["offset"] = offset
-
-            resp = requests.get(url, params=params, timeout=40)
-            if resp.status_code == 200:
-                data = resp.json()
-                for update in data.get("result", []):
-                    offset = update["update_id"] + 1
-                    msg = update.get("message") or update.get("channel_post") or update.get("edited_message")
-                    if msg:
-                        process_message(msg)
-        except Exception as e:
-            print(f"Polling error: {e}")
-            time.sleep(3)
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), WebhookServerHandler)
+    print(f"Webhook HTTP Server listening on port {port}...")
+    server.serve_forever()
 
 if __name__ == "__main__":
     main()
