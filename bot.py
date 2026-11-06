@@ -136,33 +136,53 @@ def parse_urls(text):
 
 
 
+def get_instagram_cookies_path():
+    cookie_path = "cookies.txt"
+    if not os.path.exists(cookie_path) or os.path.getsize(cookie_path) == 0:
+        env_sessionid = os.getenv("INSTAGRAM_SESSIONID")
+        env_cookies = os.getenv("INSTAGRAM_COOKIES")
+        if env_sessionid:
+            with open(cookie_path, "w", encoding="utf-8") as f:
+                f.write(f"# Netscape HTTP Cookie File\n.instagram.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{env_sessionid.strip()}\n")
+        elif env_cookies:
+            with open(cookie_path, "w", encoding="utf-8") as f:
+                f.write(env_cookies.strip())
+    if os.path.exists(cookie_path) and os.path.getsize(cookie_path) > 10:
+        return cookie_path
+    return None
+
 def download_reel(url):
-
     ydl_opts = {
-
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-
         'format': 'mp4/best',
-
         'quiet': True,
-
         'no_warnings': True,
-
     }
+    cookie_file = get_instagram_cookies_path()
+    if cookie_file:
+        ydl_opts['cookiefile'] = cookie_file
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-
-        info = ydl.extract_info(url, download=True)
-
-        filename = ydl.prepare_filename(info)
-
-        creator = info.get("channel") or info.get("uploader") or "Unknown"
-
-        reel_id = info.get("id") or str(int(time.time()))
-
-        caption = info.get("description") or ""
-
-        return filename, creator, reel_id, caption
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            creator = info.get("channel") or info.get("uploader") or "Unknown"
+            reel_id = info.get("id") or str(int(time.time()))
+            caption = info.get("description") or ""
+            return filename, creator, reel_id, caption
+    except yt_dlp.utils.DownloadError as e:
+        err_str = str(e)
+        if any(k in err_str.lower() for k in ["empty media response", "login-in", "not granting access"]):
+            raise RuntimeError(
+                "Instagram Login Wall Detected! Instagram has blocked logged-out access to this reel.\n\n"
+                "To fix this, send your Instagram sessionid to this bot:\n"
+                "/setcookie <your_sessionid>\n\n"
+                "How to get sessionid in 10 seconds on PC:\n"
+                "1. Open instagram.com (logged in)\n"
+                "2. Press F12 -> Application -> Cookies -> https://www.instagram.com\n"
+                "3. Copy 'sessionid' and send here: /setcookie <value>"
+            )
+        raise
 
 
 
@@ -373,6 +393,38 @@ def process_message(message):
 
 
 
+
+    # Set Cookie / Session ID Command via Telegram
+    if text.strip().lower().startswith("/setcookie") or text.strip().lower().startswith("/cookie"):
+        parts = text.strip().split(maxsplit=1)
+        if len(parts) > 1 and parts[1].strip():
+            raw_val = parts[1].strip()
+            if "sessionid=" in raw_val:
+                for item in raw_val.split(";"):
+                    if "sessionid=" in item:
+                        raw_val = item.split("sessionid=", 1)[1].strip()
+                        break
+            if raw_val.startswith("# Netscape"):
+                cookie_content = raw_val
+            else:
+                cookie_content = (
+                    "# Netscape HTTP Cookie File\n"
+                    f".instagram.com\tTRUE\t/\tTRUE\t2147483647\tsessionid\t{raw_val}\n"
+                )
+            with open("cookies.txt", "w", encoding="utf-8") as f:
+                f.write(cookie_content)
+            send_telegram_message(
+                chat_id,
+                "Instagram Session Cookie Saved Successfully! Reels will now download without login errors.",
+                message_id
+            )
+        else:
+            send_telegram_message(
+                chat_id,
+                "Usage: /setcookie <your_sessionid>\n\nOpen instagram.com in browser, F12 -> Application -> Cookies -> copy sessionid value.",
+                message_id
+            )
+        return
     reel_url, provided_link = parse_urls(text)
 
 
